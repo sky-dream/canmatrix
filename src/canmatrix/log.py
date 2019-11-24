@@ -36,11 +36,13 @@ def setup_logger():  # type: () -> logging.Logger
         fmt='%(levelname)s - %(module)s - %(message)s')
 
     handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
+    open('log.txt', 'w').close()
+    handler_txt = logging.FileHandler("./log.txt")
+    handler_txt.setFormatter(formatter)
 
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
-    logger.addHandler(handler)
+    logger.addHandler(handler_txt)
     return logger
 
 

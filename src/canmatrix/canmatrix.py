@@ -169,6 +169,12 @@ class Signal(object):
     cycle_time = attr.ib(default=0)  # type: int
     initial_value = attr.ib(converter=float_factory, default=float_factory(0.0))  # type: canmatrix.types.PhysicalValue
 
+    pdu_name = attr.ib(default="")  # type: str
+    pdu_type  = attr.ib(default="")  # type: str
+    pdu_length = attr.ib(default="")  # type: str
+    pdu_portType  = attr.ib(default="")  # type: str
+    signal_group  = attr.ib(default="")  # type: str
+    
     min = attr.ib(
         converter=lambda value, float_factory=float_factory: (
             float_factory(value)
@@ -721,6 +727,96 @@ class ArbitrationId(object):
             )
         )
 
+@attr.s(cmp=False)
+class Pdu(object):
+    """
+    Represents a PDU.
+
+    PDUs are hierarchical groups of signals which are needed to represent Flexray busses
+    Whereas a PDU is the same than a frame on CAN bus, at flexray a frame may consist of
+    multiple PDUs (a bit like multiple signal layout for multiplexed can frames).
+    This class is only used for flexray busses.
+    """
+
+    name = attr.ib(default="")  # type: str
+    size = attr.ib(default=0)  # type: int
+    triggering_name = attr.ib(default="")  # type: str
+    pdu_type = attr.ib(default="")  # type: str
+    port_type = attr.ib(default="")  # type: str
+    signals = attr.ib(factory=list)  # type: typing.MutableSequence[Signal]
+    signalGroups = attr.ib(factory=list)  # type: typing.MutableSequence[SignalGroup]
+
+    def add_signal(self, signal):
+        # type: (Signal) -> Signal
+        """
+        Add Signal to Pdu.
+
+        :param Signal signal: Signal to be added.
+        :return: the signal added.
+        """
+        self.signals.append(signal)
+        return self.signals[len(self.signals) - 1]
+    def add_signal_group(self, Name, Id, signalNames):
+        # type: (str, int, typing.Sequence[str]) -> None
+        """Add new SignalGroup to the Frame. Add given signals to the group.
+
+        :param str Name: Group name
+        :param int Id: Group id
+        :param list of str signalNames: list of Signal names to add. Non existing names are ignored.
+        """
+        newGroup = SignalGroup(Name, Id)
+        #logger.debug("01 in PDU add_signal_group function,signalGroup "+str(newGroup)+" is added.")        
+        #self.signalGroups.append(newGroup)                
+        for signal in signalNames:
+            signal = signal.strip()
+            #logger.debug("02 in PDU add_signal_group function,signal name  is "+str(signal))
+            if signal.__len__() == 0:
+                continue
+            signalId = self.signal_by_name(signal)
+            if signalId is not None:
+                newGroup.add_signal(signal)
+            else:
+                logger.debug("03 in PDU add_signal_group function,signal ID not found: "+str(signal))    
+        self.signalGroups.append(newGroup)
+        #logger.debug("04 in PDU add_signal_group function,signalGroups last one now is "+str(self.signalGroups)) 
+
+    def get_signal_group_for_signal(self, signal_to_find):
+        logger.debug("01 in PDU get_signal_group_for_signal function, start find signalgroup with signal "+str(signal_to_find))
+        if self.signalGroups is None:
+            logger.debug("02 self.signalGroups is none")
+        logger.debug("03 in PDU get_signal_group_for_signal function, self.signalGroups[0] is "+ str(self.signalGroups))
+        for signal_group in self.signalGroups:
+            #logger.debug("04 in PDU get_signal_group_for_signal function, current signal list is "+str(signal_group.signals))
+            for signal in signal_group.signals:
+                #logger.debug("05 in PDU get_signal_group_for_signal function, current searchingSignalName is "+str(signal))
+                inputSignalName = str(signal_to_find)
+                searchingSignalName = str(signal)
+                #logger.debug("06 in PDU get_signal_group_for_signal function,inputSignalName is "+inputSignalName)
+                if inputSignalName == searchingSignalName:
+                    #logger.debug("07 in PDU get_signal_group_for_signal function, found signal group"+ str(signal_group.signals)+"with signal "+str(signal_to_find))
+                    return signal_group
+                if signal is None:
+                    logger.debug("08 in PDU get_signal_group_for_signal function,signal is none in signal group.")    
+            if signal_group is None:
+                signal_group = self.signal_by_name(signal_to_find)
+                #logger.debug("09 in PDU get_signal_group_for_signal function,signal_group is not exist for signal "+signal_to_find)                   
+            if signal_group is []:
+                #logger.debug("10 in PDU get_signal_group_for_signal function,signal_group is empty") 
+        return None
+
+    def signal_by_name(self, name):
+        # type: (str) -> typing.Union[Signal, None]
+        """
+        Get signal by name.
+
+        :param str name: signal name to be found.
+        :return: signal with given name or None if not found
+        """
+        for signal in self.signals:
+            if signal.name == name:
+                return signal
+        return None
+
 
 @attr.s(cmp=False)
 class Frame(object):
@@ -757,12 +853,19 @@ class Frame(object):
     attributes = attr.ib(factory=dict)  # type: typing.MutableMapping[str, typing.Any]
     receivers = attr.ib(factory=list)  # type: typing.MutableSequence[str]
     signalGroups = attr.ib(factory=list)  # type: typing.MutableSequence[SignalGroup]
+    slot_id = attr.ib(default="")
+    base_cycle = attr.ib(default="")
+    repitition_cycle = attr.ib(default="")
+    is_FlexrayFrame = attr.ib(default=False)
 
     cycle_time = attr.ib(default=0)  # type: int
 
     is_j1939 = attr.ib(default=False)  # type: bool
     # ('cycleTime', '_cycleTime', int, None),
     # ('sendType', '_sendType', str, None),
+
+    pdus = attr.ib(factory=list)  # type: typing.MutableSequence[Pdu]
+
 
     @property
     def is_multiplexed(self):  # type: () -> bool
@@ -879,6 +982,7 @@ class Frame(object):
 
     def __iter__(self):  # type: () -> typing.Iterator[Signal]
         """Iterator over all signals."""
+
         return iter(self.signals)
 
     def add_signal_group(self, Name, Id, signalNames):
@@ -890,14 +994,18 @@ class Frame(object):
         :param list of str signalNames: list of Signal names to add. Non existing names are ignored.
         """
         newGroup = SignalGroup(Name, Id)
-        self.signalGroups.append(newGroup)
+        logger.debug("in Frame add_signal_group function,signalGroup "+str(newGroup)+" is added.")
+        
+        #self.signalGroups.append(newGroup)
+        #logger.debug("in Frame add_signal_group function,signalGroups last one now is "+str(self.signalGroups))
         for signal in signalNames:
             signal = signal.strip()
             if signal.__len__() == 0:
                 continue
-            signalId = self.signal_by_name(signal)
-            if signalId is not None:
-                newGroup.add_signal(signalId)
+            #signalId = self.signal_by_name(signal)
+            #if signalId is not None:
+            newGroup.add_signal(signal)
+        self.signalGroups.append(newGroup)        
 
     def signal_group_by_name(self, name):
         # type: (str) -> typing.Union[SignalGroup, None]
@@ -912,6 +1020,18 @@ class Frame(object):
                 return signalGroup
         return None
 
+    def add_pdu(self, pdu):
+        # type: (Pdu) -> Pdu
+        """
+        Add Pdu to Frame.
+
+        :param Pdu pdu: Pdu to be added.
+        :return: the pdu added.
+        """
+        self.pdus.append(pdu)
+        return self.pdus[len(self.pdus) - 1]
+
+
     def add_signal(self, signal):
         # type: (Signal) -> Signal
         """
@@ -922,6 +1042,29 @@ class Frame(object):
         """
         self.signals.append(signal)
         return self.signals[len(self.signals) - 1]
+
+    '''used as frame.add_signal_group(group_name, group_id, members) in arxml'''
+    def get_signal_group_for_signal(self, signal_to_find):
+        logger.debug("01 in frame get_signal_group_for_signal function, start find signalgroup with signal "+str(signal_to_find))
+        if self.signalGroups is None:
+            logger.debug("02 self.signalGroups is none")
+        #logger.debug("03 self.signalGroups[0] is "+ str(self.signalGroups))
+        for signal_group in self.signalGroups:
+            #logger.debug("04 in frame get_signal_group_for_signal function, current signal list is "+str(signal_group.signals))
+            for signal in signal_group.signals:
+                #logger.debug("05 in frame get_signal_group_for_signal function, current signal is "+str(signal))
+                inputSignalName = str(signal)
+                searchingSignalName = str(signal_to_find)
+                if inputSignalName == searchingSignalName  :
+                    #logger.debug("06 in frame get_signal_group_for_signal function, found signal group"+ str(signal_group.signals)+"with signal "+str(signal_to_find))
+                    return signal_group
+                if signal is None:
+                    logger.debug("07 in frame get_signal_group_for_signal function,signal is none in signal group"+ str(self.signalGroups))    
+            if signal_group is None:
+                logger.debug("08 in frame get_signal_group_for_signal function,signal_group is none")                   
+            if signal_group is []:
+                logger.debug("09 in frame get_signal_group_for_signal function,signal_group is empty") 
+        return None
 
     def add_transmitter(self, transmitter):
         # type: (str) -> None
@@ -988,6 +1131,8 @@ class Frame(object):
             self.attributes[attribute] = str(value)
         except UnicodeDecodeError:
             self.attributes[attribute] = value
+        if type(self.attributes[attribute]) == str:
+            self.attributes[attribute] = self.attributes[attribute].strip()
 
     def del_attribute(self, attribute):
         # type: (str) -> typing.Any

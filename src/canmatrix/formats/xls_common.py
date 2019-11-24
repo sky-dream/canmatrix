@@ -25,8 +25,10 @@ import typing
 from builtins import *
 
 import canmatrix
+import logging
+import canmatrix.log
 
-
+logger = logging.getLogger(__name__)
 def get_frame_info(db, frame):
     # type: (canmatrix.CanMatrix, canmatrix.Frame) -> typing.List[str]
     ret_array = []  # type: typing.List[str]
@@ -119,4 +121,15 @@ def get_signal(db, sig, motorola_bit_format):
         # factor == 1.0
         else:
             back_array.append("")
+    if sig.pdu_name is not None:
+        back_array.append(sig.pdu_name.strip())
+        logger.debug("signal related PDU name is :"+sig.pdu_name.strip())
+    if sig.pdu_type is not None:
+        back_array.append(sig.pdu_type.strip())
+    if sig.pdu_length is not None:
+        back_array.append(sig.pdu_length)
+    if sig.pdu_portType is not None:
+        back_array.append(sig.pdu_portType.strip())
+    if sig.signal_group is not None:
+        back_array.append(str(sig.signal_group))
     return front_array, back_array
