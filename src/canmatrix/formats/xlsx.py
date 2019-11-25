@@ -104,9 +104,10 @@ def dump(db, filename, **options):
     # type: (canmatrix.CanMatrix, str, **str) -> None
     motorola_bit_format = options.get("xlsMotorolaBitFormat", "msbreverse")
     values_in_seperate_lines = options.get("xlsValuesInSeperateLines", True)
-    additional_signal_columns = [x for x in options.get("additionalAttributes", "").split(",") if x]
-    additional_frame_columns = [x for x in options.get("additionalFrameAttributes", "").split(",") if x]
-
+    additional_signal_columns = [x for x in options.get(
+        "additionalAttributes", "").split(",") if x]
+    additional_frame_columns = [x for x in options.get(
+        "additionalFrameAttributes", "").split(",") if x]
 
     head_top = [
         'ID',
@@ -114,6 +115,10 @@ def dump(db, filename, **options):
         'Cycle Time [ms]',
         'Launch Type',
         'Launch Parameter',
+        'PDU_Name',
+        'PDU_Type',
+        'PDU_Length',
+        'PDU_PortType',
         'Signal Byte No.',
         'Signal Bit No.',
         'Signal Name',
@@ -122,7 +127,8 @@ def dump(db, filename, **options):
         'Signal Default',
         'Signal Not Available',
         'Byteorder']
-    head_tail = ['Value', 'Name / Phys. Range', 'Function / Increment Unit']
+    head_tail = ['Value', 'Name / Phys. Range', 'Function / Increment Unit',
+                 'Signal_Group']
 
     workbook = xlsxwriter.Workbook(filename)
     # ws_name = os.path.basename(filename).replace('.xlsx', '')
@@ -182,10 +188,15 @@ def dump(db, filename, **options):
 
     # set width of selected Cols
     worksheet.set_column(0, 0, 3.57)
-    worksheet.set_column(1, 1, 21)
-    worksheet.set_column(3, 3, 12.29)
-    worksheet.set_column(7, 7, 21)
-    worksheet.set_column(8, 8, 30)
+    worksheet.set_column(1, 1, 15)  # column b width
+    worksheet.set_column(3, 3, 6)  # column d width
+    worksheet.set_column(5, 5, 18)  # column F width
+    worksheet.set_column(6, 6, 12)
+    worksheet.set_column(7, 7, 5)
+    worksheet.set_column(8, 8, 10)
+    worksheet.set_column(11, 11, 30)
+    worksheet.set_column(12, 12, 45)
+    worksheet.set_column(20, 20, 15)
 
     for additional_col in additional_frame_columns:
         row_array.append("frame." + additional_col)
@@ -199,8 +210,8 @@ def dump(db, filename, **options):
     logger.debug("DEBUG: Length of db.frames is %d", len(db.frames))
     for frame in db.frames:
         if frame.is_complex_multiplexed:
-            logger.error("Export complex multiplexers is not supported - ignoring frame %s", frame.name)
-            continue
+            logger.error(
+                "Export complex multiplexers is not supported - frame %s might be uncomplete", frame.name)
         frame_hash[int(frame.arbitration_id.id)] = frame
 
     # set row to first Frame (row = 0 is header)
@@ -211,105 +222,156 @@ def dump(db, filename, **options):
 
         frame = frame_hash[idx]
         frame_style = sty_first_frame
-
+        pdu_hash = {}
+        for pdu in frame.pdus:
+            pdu_hash[pdu.name] = pdu
         # sort signals:
         sig_hash = {}
-        for sig in frame.signals:
+        for sig in pdu.signals:
             sig_hash["%02d" % int(sig.get_startbit()) + sig.name] = sig
 
         # set style for first line with border
         signal_style = sty_first_frame
 
-        additional_frame_info = [frame.attribute(additional, default="") for additional in additional_frame_columns]
+        additional_frame_info = [frame.attribute(
+            additional, default="") for additional in additional_frame_columns]
 
         row_array = []
-        if len(sig_hash) == 0:
-            row_array += canmatrix.formats.xls_common.get_frame_info(db, frame)
-            for _ in range(5, head_start):
-                row_array.append("")
-            temp_col = write_excel_line(worksheet, row, 0, row_array, frame_style)
-            temp_col = write_ecu_matrix(ecu_list, None, frame, worksheet, row, temp_col, frame_style)
+        # iterate over pdus
+        for pdu_idx in sorted(pdu_hash.keys()):
+            pdu = pdu_hash[pdu_idx]
+            if len(sig_hash) == 0:
+                row_array += canmatrix.formats.xls_common.get_frame_info(
+                    db, frame)
+                pdu_row_array = canmatrix.formats.xls_common.get_pdu_info(
+                    db, pdu)
 
-            row_array = ["" for _ in range(temp_col, additional_frame_start)]
-            row_array += additional_frame_info
-            row_array += ["" for _ in additional_signal_columns]
-            write_excel_line(worksheet, row, temp_col, row_array, frame_style)
-            row += 1
+                #for _ in range(5, head_start):
+                    #row_array.append("")
+                temp_col = write_excel_line(
+                    worksheet, row, 0, row_array, frame_style)
+                temp_col = write_excel_line(
+                    worksheet, row, temp_col, pdu_row_array, frame_style)
+                temp_col = write_ecu_matrix(
+                    ecu_list, None, frame, worksheet, row, temp_col, frame_style)
+                row_array = ["" for _ in range(
+                    temp_col, additional_frame_start)]
+                row_array += additional_frame_info
+                row_array += ["" for _ in additional_signal_columns]
 
-        # iterate over signals
-        for sig_idx in sorted(sig_hash.keys()):
-            sig = sig_hash[sig_idx]
+                write_excel_line(worksheet, row, temp_col,
+                                 row_array, frame_style)
+                row += 1
+        # iterate over pdus
+        # for pdu_idx in sorted(pdu_hash.keys()):
+            #pdu = pdu_hash[pdu_idx]
+            # iterate over signals
+            for sig_idx in sorted(sig_hash.keys()):
+                sig = sig_hash[sig_idx]
 
-            # if not first Signal in Frame, set style
-            if signal_style != sty_first_frame:
-                signal_style = sty_norm
+                # if not first Signal in Frame, set style
+                if signal_style != sty_first_frame:
+                    signal_style = sty_norm
 
-            # valuetable available?
-            if len(sig.values) > 0 and not values_in_seperate_lines:
-                value_style = signal_style
-                # iterate over values in valuetable
-                for val in sorted(sig.values.keys()):
-                    row_array = canmatrix.formats.xls_common.get_frame_info(db, frame)
-                    front_col = write_excel_line(worksheet, row, 0, row_array, frame_style)
+                # valuetable available?
+                if len(sig.values) > 0 and not values_in_seperate_lines:
+                    value_style = signal_style
+                    # iterate over values in valuetable
+                    for val in sorted(sig.values.keys()):
+                        row_array = canmatrix.formats.xls_common.get_frame_info(
+                            db, frame)
+                        front_col = write_excel_line(
+                            worksheet, row, 0, row_array, frame_style)
+                        pdu_row_array = canmatrix.formats.xls_common.get_pdu_info(
+                            db, pdu)
+                        front_col = write_excel_line(
+                            worksheet, row, front_col, pdu_row_array, frame_style)
+                        if frame_style != sty_first_frame:
+                            worksheet.set_row(
+                                row, None, None, {'level': 1})
+
+                        col = head_start
+                        col = write_ecu_matrix(
+                            ecu_list, sig, frame, worksheet, row, col, frame_style)
+                        logger.debug("len(sig.values) > 0,for frame info current row_array is: " + str(
+                            row_array)+"current col is: " + str(col))
+                        # write Value
+                        (frontRow, back_row) = canmatrix.formats.xls_common.get_signal(
+                            db, sig, motorola_bit_format)
+                        logger.debug("len(sig.values) > 0, current front row is: " +
+                                     str(frontRow)+"current back_row is: " + str(back_row))
+                        write_excel_line(
+                            worksheet, row, front_col, frontRow, signal_style)
+                        back_row += additional_frame_info
+                        for item in additional_signal_columns:
+                            temp = getattr(sig, item, "")
+                            back_row.append(temp)
+
+                        write_excel_line(
+                            worksheet, row, col + 2, back_row, signal_style)
+                        write_excel_line(worksheet, row, col, [
+                            val, sig.values[val]], value_style)
+
+                        # no min/max here, because min/max has same col as values...
+                        # next row
+                        row += 1
+                        # set style to normal - without border
+                        signal_style = sty_white
+                        frame_style = sty_white
+                        value_style = sty_norm
+                    # loop over values ends here
+                # no valuetable available
+                else:
+                    row_array = canmatrix.formats.xls_common.get_frame_info(
+                        db, frame)
+                    front_col = write_excel_line(
+                        worksheet, row, 0, row_array, frame_style)
+                    pdu_row_array = canmatrix.formats.xls_common.get_pdu_info(
+                        db, pdu)
+                    front_col = write_excel_line(
+                        worksheet, row, front_col, pdu_row_array, frame_style)
                     if frame_style != sty_first_frame:
                         worksheet.set_row(row, None, None, {'level': 1})
 
                     col = head_start
-                    col = write_ecu_matrix(ecu_list, sig, frame, worksheet, row, col, frame_style)
+                    col = write_ecu_matrix(
+                        ecu_list, sig, frame, worksheet, row, col, frame_style)
+                    logger.debug("len(sig.values) = 0,for frame info current row_array is: " + str(
+                        row_array)+"current col is: " + str(col))
+                    (frontRow, back_row) = canmatrix.formats.xls_common.get_signal(
+                        db, sig, motorola_bit_format)
 
-                    # write Value
-                    (frontRow, back_row) = canmatrix.formats.xls_common.get_signal(db, sig, motorola_bit_format)
-                    write_excel_line(worksheet, row, front_col, frontRow, signal_style)
+                    write_excel_line(
+                        worksheet, row, front_col, frontRow, signal_style)
+
+                    if float(sig.min) != 0 or float(sig.max) != 1.0:
+                        # type: ignore
+                        back_row.insert(0, str("%g..%g" %
+                                               (sig.min, sig.max)))
+                    else:
+                        back_row.insert(0, "")
+                    back_row.insert(0, "")
+
                     back_row += additional_frame_info
                     for item in additional_signal_columns:
                         temp = getattr(sig, item, "")
                         back_row.append(temp)
-
-
-                    write_excel_line(worksheet, row, col + 2, back_row, signal_style)
-                    write_excel_line(worksheet, row, col, [val, sig.values[val]], value_style)
-
-                    # no min/max here, because min/max has same col as values...
+                    logger.debug("len(sig.values) = 0,current front row is: " +
+                                 str(frontRow)+"current back_row is: " + str(back_row))
+                    write_excel_line(worksheet, row, col,
+                                     back_row, signal_style)
+                    if len(sig.values) > 0:
+                        write_excel_line(worksheet, row, col, ["\n".join(
+                            ["{}: {}".format(a, b) for (a, b) in sig.values.items()])], signal_style)
+                        logger.debug(
+                            "sig.values.items() keys is : "+str(sig.values.keys()))
                     # next row
                     row += 1
                     # set style to normal - without border
                     signal_style = sty_white
                     frame_style = sty_white
-                    value_style = sty_norm
-                # loop over values ends here
-            # no valuetable available
-            else:
-                row_array = canmatrix.formats.xls_common.get_frame_info(db, frame)
-                front_col = write_excel_line(worksheet, row, 0, row_array, frame_style)
-                if frame_style != sty_first_frame:
-                    worksheet.set_row(row, None, None, {'level': 1})
-
-                col = head_start
-                col = write_ecu_matrix(ecu_list, sig, frame, worksheet, row, col, frame_style)
-                (frontRow, back_row) = canmatrix.formats.xls_common.get_signal(db, sig, motorola_bit_format)
-                write_excel_line(worksheet, row, front_col, frontRow, signal_style)
-
-                if float(sig.min) != 0 or float(sig.max) != 1.0:
-                    back_row.insert(0, str("%g..%g" % (sig.min, sig.max)))  # type: ignore
-                else:
-                    back_row.insert(0, "")
-                back_row.insert(0, "")
-
-                back_row += additional_frame_info
-                for item in additional_signal_columns:
-                    temp = getattr(sig, item, "")
-                    back_row.append(temp)
-
-                write_excel_line(worksheet, row, col, back_row, signal_style)
-                if len(sig.values) > 0:
-                    write_excel_line(worksheet, row, col, ["\n".join(["{}: {}".format(a,b) for (a,b) in sig.values.items()])], signal_style)
-                # next row
-                row += 1
-                # set style to normal - without border
-                signal_style = sty_white
-                frame_style = sty_white
-        # loop over signals ends here
-    # loop over frames ends here
+                    # loop over signals ends here
+                # loop over frames ends here
 
     worksheet.autofilter(0, 0, row, len(head_top) +
                          len(head_tail) + len(db.ecus))
@@ -387,9 +449,11 @@ def load(filename, **options):
     # type: (typing.BinaryIO, **str) -> canmatrix.CanMatrix
     # use xlrd excel reader if available, because its more robust
     if options.get('xlsxLegacy', False) is True:
-        logger.error("xlsx: using legacy xlsx-reader - please get xlrd working for better results!")
+        logger.error(
+            "xlsx: using legacy xlsx-reader - please get xlrd working for better results!")
     else:
-        import canmatrix.formats.xls as xls_loader  # we need alias, otherwise we hide the globally imported canmatrix
+        # we need alias, otherwise we hide the globally imported canmatrix
+        import canmatrix.formats.xls as xls_loader
         return xls_loader.load(filename, **options)
 
     # else use this hack to read xlsx
@@ -451,10 +515,12 @@ def load(filename, **options):
             # launch_param = str(int(launch_param))
 
             if frame_id.endswith("xh"):
-                new_frame = canmatrix.Frame(frame_name, arbitration_id=int(frame_id[:-2], 16), size=dlc)
+                new_frame = canmatrix.Frame(
+                    frame_name, arbitration_id=int(frame_id[:-2], 16), size=dlc)
                 new_frame.arbitration_id.extended = True
             else:
-                new_frame = canmatrix.Frame(frame_name, arbitration_id=int(frame_id[:-1], 16), size=dlc)
+                new_frame = canmatrix.Frame(
+                    frame_name, arbitration_id=int(frame_id[:-1], 16), size=dlc)
 
             db.add_frame(new_frame)
 
@@ -505,7 +571,8 @@ def load(filename, **options):
                         if 'r' in ecu_sender_receiver:
                             receiver.append(ecu_name)
                 new_signal = canmatrix.Signal(signal_name,
-                                              start_bit=(start_byte - 1) * 8 + start_bit,
+                                              start_bit=(
+                                                  start_byte - 1) * 8 + start_bit,
                                               size=signal_length,
                                               is_little_endian=is_little_endian,
                                               is_signed=is_signed,
@@ -517,7 +584,8 @@ def load(filename, **options):
                         new_signal.set_startbit(
                             (start_byte - 1) * 8 + start_bit, bitNumbering=1)
                     elif motorola_bit_format == "msbreverse":
-                        new_signal.set_startbit((start_byte - 1) * 8 + start_bit)
+                        new_signal.set_startbit(
+                            (start_byte - 1) * 8 + start_bit)
                     else:  # motorola_bit_format == "lsb"
                         new_signal.set_startbit(
                             (start_byte - 1) * 8 + start_bit,
