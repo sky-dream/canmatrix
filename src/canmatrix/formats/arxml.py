@@ -353,10 +353,45 @@ def get_signals(xml_signal_pdu_mapping_array, frame, pdu, ecu_name,root_or_cache
         start_bit = get_child(xml_signal_pdu_mapping, "START-POSITION", root_or_cache, ns)
 
         xml_isignal = get_child(xml_signal_pdu_mapping, "I-SIGNAL", root_or_cache, ns)
+        xml_isignal_group = get_child(xml_signal_pdu_mapping, "I-SIGNAL-GROUP", root_or_cache, ns)
         xml_system_signal = get_child(xml_isignal, "SYSTEM-SIGNAL", root_or_cache, ns)
         """it is possible that I-SIGNAL or I-SIGNAL-GROUP is in the PDU tag, both signal and signal mapping ref will be defined in the I-PDU."""
 
-        xml_isignal_group = get_child(xml_signal_pdu_mapping, "I-SIGNAL-GROUP", root_or_cache, ns)
+        if xml_isignal is None:
+            logger.debug('In PDU %s, no isignal found in mapping %s,',pdu.name,get_element_name(xml_signal_pdu_mapping,ns))
+        else:
+            str_signal_name = get_element_name(xml_isignal,ns)
+            str_system_signal_name = get_element_name(xml_system_signal,ns)
+            #base_type = get_child(xml_isignal, "BASE-TYPE", root_or_cache, ns)
+            #try:
+                #type_encoding = get_child(base_type, "BASE-TYPE-ENCODING", root_or_cache, ns).text
+            #except AttributeError:
+                #type_encoding = "None"            
+            length = get_child(xml_isignal, "LENGTH", root_or_cache, ns)
+            #unit_element = get_child(xml_isignal, "UNIT", root_or_cache, ns)
+            #unit_element = ""
+            is_little_endian = False
+            if motorola is not None:
+                if motorola.text == 'MOST-SIGNIFICANT-BYTE-LAST':
+                    is_little_endian = True
+            else:
+                logger.debug('no name byte order for signal' + str_signal_name)
+            signal_description = get_element_desc(xml_system_signal, root_or_cache, ns)
+
+            if start_bit is None:
+                start_bit.text = 0
+            struct_signal = canmatrix.Signal(
+                str_signal_name,
+                start_bit=int(start_bit.text) + bit_offset,
+                size=int(length.text),
+                is_little_endian=is_little_endian,
+                comment=signal_description,
+                system_signal_name = str_system_signal_name)
+
+        # save signal, to determin receiver-ECUs for this signal later
+        signal_rxs[xml_system_signal] = struct_signal
+        if ecu_name is not None:
+            signal_rxs[xml_system_signal].add_receiver(ecu_name)            
         
         if xml_isignal_group is not None:
             isignal_in_signal_group_array = get_children(xml_isignal_group, "I-SIGNAL", root_or_cache, ns)
@@ -370,46 +405,11 @@ def get_signals(xml_signal_pdu_mapping_array, frame, pdu, ecu_name,root_or_cache
             pdu.add_signal_group(group_name,group_id,xml_isignals_name_in_group)
             frame.add_signal_group(group_name,group_id,xml_isignals_name_in_group)
             logger.debug(" get_sys_signals called in get_signals: signal found in I-SIGNAL-GROUP "+str(get_element_name(xml_isignal_group, ns))+" for signal list: "+str(xml_isignals_name_in_group))
+            struct_signal.signal_group = str(get_element_name(xml_isignal_group, ns))
             continue
-        if xml_isignal is None:
-            logger.debug('In PDU %s, no isignal found',pdu.name)
 
-        #base_type = get_child(xml_isignal, "BASE-TYPE", root_or_cache, ns)
-        #try:
-            #type_encoding = get_child(base_type, "BASE-TYPE-ENCODING", root_or_cache, ns).text
-        #except AttributeError:
-            #type_encoding = "None"
-
-        str_signal_name = get_element_name(xml_system_signal,ns)
-        
-        length = get_child(xml_isignal, "LENGTH", root_or_cache, ns)
-        #unit_element = get_child(xml_isignal, "UNIT", root_or_cache, ns)
-        #unit_element = ""
-        is_little_endian = False
-        if motorola is not None:
-            if motorola.text == 'MOST-SIGNIFICANT-BYTE-LAST':
-                is_little_endian = True
-        else:
-            logger.debug('no name byte order for signal' + str_signal_name)
-        signal_description = get_element_desc(xml_system_signal, root_or_cache, ns)
-
-        #signal_min = ""
-        #signal_max = ""
-
-        if start_bit is not None:
-            struct_signal = canmatrix.Signal(
-                str_signal_name,
-                start_bit=int(start_bit.text) + bit_offset,
-                size=int(length.text),
-                is_little_endian=is_little_endian,
-                comment=signal_description)
-
-            # save signal, to determin receiver-ECUs for this signal later
-            signal_rxs[xml_system_signal] = struct_signal
-            if ecu_name is not None:
-                signal_rxs[xml_system_signal].add_receiver(ecu_name)
-            frame.add_signal(struct_signal)
-            pdu.add_signal(struct_signal)
+        frame.add_signal(struct_signal)
+        pdu.add_signal(struct_signal)
 
 
 def get_frame_from_multiplexed_ipdu(pdu, target_frame, multiplex_translation, root_or_cache, ns, float_factory):
@@ -915,7 +915,7 @@ def decode_flexray_helper(root, root_or_cache, ns, float_factory):
                     #logger.debug(" flexray_helper ipdu_length is :"+str(ipdu_length))
                     #logger.debug(" flexray_helper pdu_port_type is :"+str(pdu_port_type))
                     #logger.debug(" flexray_helper ipdu_name is :"+str(ipdu_name))
-                    target_pdu = canmatrix.Pdu(name = ipdu_name, size=ipdu_length,
+                    target_pdu = canmatrix.Pdu(name = ipdu_name, size=ipdu_length,pdu_type=pdu_type,
                                                triggering_name = ipdu_triggering_name, port_type=pdu_port_type)
                     
                     sig_pdu_mappings = get_children(ipdu, "I-SIGNAL-TO-I-PDU-MAPPING", root_or_cache, ns)
@@ -1019,7 +1019,7 @@ def decode_can_helper(root, root_or_cache, ns, float_factory, ignore_cluster_inf
                     #logger.debug(" can_helper ipdu_length is :"+str(ipdu_length))
                     #logger.debug(" can_helper pdu_port_type is :"+str(pdu_port_type))
                     #logger.debug(" can_helper ipdu_name is :"+str(ipdu_name))
-                    target_pdu = canmatrix.Pdu(name = ipdu_name, size=ipdu_length,
+                    target_pdu = canmatrix.Pdu(name = ipdu_name, size=ipdu_length,pdu_type=pdu_type,
                                                triggering_name = ipdu_triggering_name, port_type=pdu_port_type)
                     
                     sig_pdu_mappings = get_children(ipdu, "I-SIGNAL-TO-I-PDU-MAPPING", root_or_cache, ns)

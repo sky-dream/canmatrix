@@ -29,6 +29,8 @@ import logging
 import canmatrix.log
 
 logger = logging.getLogger(__name__)
+
+
 def get_frame_info(db, frame):
     # type: (canmatrix.CanMatrix, canmatrix.Frame) -> typing.List[str]
     ret_array = []  # type: typing.List[str]
@@ -55,6 +57,31 @@ def get_frame_info(db, frame):
     return ret_array
 
 
+def get_pdu_info(db, pdu):
+    ret_array = []  # type: typing.List[str]
+    # export pdu related info,'PDU_Name', 'PDU_Type', 'PDU_Length','PDU_PortType',
+
+    if pdu.name is not None:
+        ret_array.append(pdu.name)
+    else:
+        ret_array.append("")
+    if pdu.pdu_type is not None:
+        ret_array.append(pdu.pdu_type)
+    else:
+        ret_array.append("")
+    if pdu.size is not None:
+        ret_array.append(pdu.size)
+    else:
+        ret_array.append("")
+    if pdu.port_type is not None:
+        ret_array.append(pdu.port_type)
+    else:
+        ret_array.append("")
+
+    logger.debug("pdu info in get_pdu_info is :"+str(ret_array))
+    return ret_array
+
+
 def get_signal(db, sig, motorola_bit_format):
     # type: (canmatrix.CanMatrix, canmatrix.Signal, str) -> typing.Tuple[typing.List, typing.List]
     front_array = []  # type: typing.List[typing.Union[str, float]]
@@ -71,7 +98,7 @@ def get_signal(db, sig, motorola_bit_format):
     # start bit
     front_array.append(start_bit % 8)
     # signal name
-    front_array.append(sig.name)
+    front_array.append(sig.system_signal_name)
 
     # eval comment:
     comment = sig.comment if sig.comment else ""
@@ -121,6 +148,7 @@ def get_signal(db, sig, motorola_bit_format):
         # factor == 1.0
         else:
             back_array.append("")
+    '''        
     if sig.pdu_name is not None:
         back_array.append(sig.pdu_name.strip())
         logger.debug("signal related PDU name is :"+sig.pdu_name.strip())
@@ -130,6 +158,8 @@ def get_signal(db, sig, motorola_bit_format):
         back_array.append(sig.pdu_length)
     if sig.pdu_portType is not None:
         back_array.append(sig.pdu_portType.strip())
+    '''
     if sig.signal_group is not None:
         back_array.append(str(sig.signal_group))
+        logger.debug("signal related signal_group is :"+str(sig.signal_group))
     return front_array, back_array
