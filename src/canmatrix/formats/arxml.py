@@ -348,7 +348,7 @@ def get_signals(xml_signal_pdu_mapping_array, frame, pdu, ecu_name,root_or_cache
     if xml_signal_pdu_mapping_array is None:  # Empty signalarray - nothing to do
         return
     for xml_signal_pdu_mapping in xml_signal_pdu_mapping_array:
-        compu_method = None
+        #compu_method = None
         motorola = get_child(xml_signal_pdu_mapping, "PACKING-BYTE-ORDER", root_or_cache, ns)
         start_bit = get_child(xml_signal_pdu_mapping, "START-POSITION", root_or_cache, ns)
 
@@ -372,29 +372,37 @@ def get_signals(xml_signal_pdu_mapping_array, frame, pdu, ecu_name,root_or_cache
             logger.debug(" get_sys_signals called in get_signals: signal found in I-SIGNAL-GROUP "+str(get_element_name(xml_isignal_group, ns))+" for signal list: "+str(xml_isignals_name_in_group))
             continue
         if xml_isignal is None:
-            logger.debug('Frame %s, no isignal found',frame_or_pdu.name)
+            logger.debug('In PDU %s, no isignal found',pdu.name)
 
-        base_type = get_child(xml_isignal, "BASE-TYPE-REF", root_or_cache, ns).text.split("/")[-1]
+        #base_type = get_child(xml_isignal, "BASE-TYPE", root_or_cache, ns)
         #try:
             #type_encoding = get_child(base_type, "BASE-TYPE-ENCODING", root_or_cache, ns).text
         #except AttributeError:
             #type_encoding = "None"
-            
-        str_signal_name = get_element_name(xml_isignal,ns)
+
+        str_signal_name = get_element_name(xml_system_signal,ns)
+        
         length = get_child(xml_isignal, "LENGTH", root_or_cache, ns)
         #unit_element = get_child(xml_isignal, "UNIT", root_or_cache, ns)
-        unit_element = ""
+        #unit_element = ""
+        is_little_endian = False
+        if motorola is not None:
+            if motorola.text == 'MOST-SIGNIFICANT-BYTE-LAST':
+                is_little_endian = True
+        else:
+            logger.debug('no name byte order for signal' + str_signal_name)
+        signal_description = get_element_desc(xml_system_signal, root_or_cache, ns)
 
-        signal_description = get_child(xml_system_signal, "L-2", root_or_cache, ns)
-
-        signal_min = ""
-        signal_max = ""
+        #signal_min = ""
+        #signal_max = ""
 
         if start_bit is not None:
             struct_signal = canmatrix.Signal(
                 str_signal_name,
                 start_bit=int(start_bit.text) + bit_offset,
-                size=int(length.text))
+                size=int(length.text),
+                is_little_endian=is_little_endian,
+                comment=signal_description)
 
             # save signal, to determin receiver-ECUs for this signal later
             signal_rxs[xml_system_signal] = struct_signal
