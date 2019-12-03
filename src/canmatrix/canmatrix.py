@@ -174,7 +174,7 @@ class Signal(object):
     pdu_length = attr.ib(default="")  # type: str
     pdu_portType  = attr.ib(default="")  # type: str
     signal_group  = attr.ib(default="")  # type: str
-    
+    system_signal_name = attr.ib(default="")  # type: str
     min = attr.ib(
         converter=lambda value, float_factory=float_factory: (
             float_factory(value)
@@ -801,7 +801,8 @@ class Pdu(object):
                 signal_group = self.signal_by_name(signal_to_find)
                 #logger.debug("09 in PDU get_signal_group_for_signal function,signal_group is not exist for signal "+signal_to_find)                   
             if signal_group is []:
-                #logger.debug("10 in PDU get_signal_group_for_signal function,signal_group is empty") 
+                #logger.debug("10 in PDU get_signal_group_for_signal function,signal_group is empty")
+                pass 
         return None
 
     def signal_by_name(self, name):
