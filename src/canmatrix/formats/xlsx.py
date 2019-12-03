@@ -187,8 +187,8 @@ def dump(db, filename, **options):
     additional_frame_start = len(row_array)
 
     # set width of selected Cols
-    worksheet.set_column(0, 0, 3.57)
-    worksheet.set_column(1, 1, 15)  # column b width
+    worksheet.set_column(0, 0, 15)
+    worksheet.set_column(1, 1, 25)  # column b width
     worksheet.set_column(3, 3, 6)  # column d width
     worksheet.set_column(5, 5, 18)  # column F width
     worksheet.set_column(6, 6, 12)

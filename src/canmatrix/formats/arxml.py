@@ -878,12 +878,12 @@ def decode_flexray_helper(root, root_or_cache, ns, float_factory):
                 struct_frame = canmatrix.Frame(size = frame_size, arbitration_id = frame_counter)
                 struct_frame.name = frame_name
                 struct_frame.is_FlexrayFrame = True
-                struct_frame.slot_id = slot_id
-                struct_frame.arbitration_id = canmatrix.ArbitrationId(slot_id, extended=False)
+                struct_frame.slot_id = str(slot_id)+"-"+str(base_cycle)+"-"+frame_repetition_cycle.split("-")[-1]
+                struct_frame.arbitration_id = canmatrix.ArbitrationId(frame_counter, extended=False)
                 struct_frame.base_cycle = base_cycle
                 struct_frame.repitition_cycle = frame_repetition_cycle.replace("CYCLE-REPETITION-","")
                 struct_frame.cycle_time = 5*int(struct_frame.repitition_cycle)
-
+                frame_counter += 1
                 logger.debug("flexray_helper frame name is :"+str(frame_name))
                 #db.add_frame(frame)
                 logger.debug(" flexray_helper slot_id is :"+str(slot_id))
@@ -982,6 +982,7 @@ def decode_can_helper(root, root_or_cache, ns, float_factory, ignore_cluster_inf
                 struct_frame.is_FlexrayFrame = False
 
                 struct_frame.arbitration_id = canmatrix.ArbitrationId(arbitration_id, extended=False)
+                struct_frame.slot_id = str(hex(arbitration_id))
                 '''net frame cycle time info is in the I-PDU , so it will be set in the i-pdu process part.'''
                 #struct_frame.cycle_time 
                 logger.debug(" can_helper frame name is :"+str(frame_name))

@@ -35,10 +35,8 @@ def get_frame_info(db, frame):
     # type: (canmatrix.CanMatrix, canmatrix.Frame) -> typing.List[str]
     ret_array = []  # type: typing.List[str]
     # frame-id
-    if frame.arbitration_id.extended:
-        ret_array.append("%3Xxh" % frame.arbitration_id.id)
-    else:
-        ret_array.append("%3Xh" % frame.arbitration_id.id)
+
+    ret_array.append("%sh" % frame.slot_id)
     # frame-Name
     ret_array.append(frame.name)
 
